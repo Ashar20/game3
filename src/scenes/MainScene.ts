@@ -1,17 +1,32 @@
 import * as ex from 'excalibur';
-import { Resources } from '../resources';
 
 /**
- * Main game scene
+ * Main menu/loading scene
  */
 export class MainScene extends ex.Scene {
+  private loadingText!: ex.Text;
+
   onInitialize(engine: ex.Engine): void {
-    // This is where you'll add your actors, map, etc.
-    // Example: Load your map here when ready
-    // const map = Resources.Maps.mainMap;
+    console.log('MainScene onInitialize called');
     
-    // Add actors, spawners, etc.
-    console.log('MainScene initialized');
+    // Add a loading text or background
+    try {
+      this.loadingText = new ex.Text({
+        text: 'Loading Game...',
+        font: new ex.Font({ size: 32, family: 'Arial', color: ex.Color.White }),
+      });
+
+      const loadingActor = new ex.Actor({
+        pos: new ex.Vector(engine.drawWidth / 2, engine.drawHeight / 2),
+        anchor: ex.Vector.Half,
+      });
+      loadingActor.graphics.add(this.loadingText);
+      this.add(loadingActor);
+      
+      console.log('MainScene: Loading text added');
+    } catch (error) {
+      console.error('Error initializing MainScene:', error);
+    }
   }
 
   onActivate(): void {

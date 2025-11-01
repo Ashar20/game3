@@ -9,6 +9,9 @@ import * as tiled from '@excaliburjs/plugin-tiled';
 // Sprites/Images
 export const Images = {
   playerIdle: new ex.ImageSource('/src/assets/character/Idle.png'),
+  playerRun: new ex.ImageSource('/src/assets/character/Run.png'),
+  inventorySlots: new ex.ImageSource('/src/assets/character/Slots.png'),
+  inventoryBar: new ex.ImageSource('/src/assets/character/invimage.png'),
 };
 
 // Maps/Tilemaps
