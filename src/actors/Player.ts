@@ -1,31 +1,82 @@
 import * as ex from 'excalibur';
-import { Resources } from '../resources';
+import { Images } from '../resources';
 
 /**
  * Player actor class
  */
 export class Player extends ex.Actor {
-  private speed: number = 200;
+  private speed: number = 100;
+  private idleAnimations: { [key: string]: ex.Animation } = {};
 
   constructor(x: number, y: number) {
     super({
       pos: new ex.Vector(x, y),
-      width: 40,
-      height: 40,
-      color: ex.Color.Blue,
+      width: 16,
+      height: 16,
       collisionType: ex.CollisionType.Active,
     });
   }
 
   onInitialize(engine: ex.Engine): void {
-    // Load player sprite if available
-    // const sprite = Resources.Images.playerSprite.toSprite();
-    // this.graphics.use(sprite);
-    
+    // Wait for the image to be loaded before creating sprite sheet
+    if (!Images.playerIdle.isLoaded()) {
+      Images.playerIdle.load().then(() => {
+        this.setupSpriteSheet();
+      });
+    } else {
+      this.setupSpriteSheet();
+    }
+
     // Set up keyboard input
     engine.input.keyboard.on('press', (evt) => {
       this.handleInput(evt.key);
     });
+  }
+
+  private setupSpriteSheet(): void {
+    // Load player sprite sheet
+    const spriteSheet = ex.SpriteSheet.fromImageSource({
+      image: Images.playerIdle,
+      grid: {
+        rows: 3,
+        columns: 4,
+        spriteWidth: 16,
+        spriteHeight: 16,
+      },
+    });
+
+    // Create idle animations for each direction
+    // Row 1 (frames 0-3): Facing down
+    this.idleAnimations['down'] = ex.Animation.fromSpriteSheet(
+      spriteSheet,
+      [0, 1, 2, 3],
+      200
+    );
+
+    // Row 2 (frames 4-7): Facing up
+    this.idleAnimations['up'] = ex.Animation.fromSpriteSheet(
+      spriteSheet,
+      [4, 5, 6, 7],
+      200
+    );
+
+    // Row 3 (frames 8-11): Facing right (mirror for left)
+    this.idleAnimations['right'] = ex.Animation.fromSpriteSheet(
+      spriteSheet,
+      [8, 9, 10, 11],
+      200
+    );
+
+    // Left: same as right but flipped
+    this.idleAnimations['left'] = ex.Animation.fromSpriteSheet(
+      spriteSheet,
+      [8, 9, 10, 11],
+      200
+    );
+    this.idleAnimations['left'].flipHorizontal = true;
+
+    // Start with down-facing idle animation
+    this.graphics.use(this.idleAnimations['down']);
   }
 
   onPreUpdate(engine: ex.Engine, delta: number): void {
@@ -40,6 +91,23 @@ export class Player extends ex.Actor {
       : engine.input.keyboard.isHeld(ex.Keys.S) || engine.input.keyboard.isHeld(ex.Keys.ArrowDown)
       ? 1
       : 0;
+
+    // Determine facing direction for animation
+    let facingDirection = '';
+    if (upDown > 0) {
+      facingDirection = 'down';
+    } else if (upDown < 0) {
+      facingDirection = 'up';
+    } else if (leftRight > 0) {
+      facingDirection = 'right';
+    } else if (leftRight < 0) {
+      facingDirection = 'left';
+    }
+
+    // Update animation based on direction
+    if (facingDirection && this.idleAnimations[facingDirection]) {
+      this.graphics.use(this.idleAnimations[facingDirection]);
+    }
 
     // Normalize diagonal movement
     const direction = new ex.Vector(leftRight, upDown);

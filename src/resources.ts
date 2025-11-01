@@ -8,9 +8,7 @@ import * as tiled from '@excaliburjs/plugin-tiled';
 
 // Sprites/Images
 export const Images = {
-  // Example: Add your sprite images here
-  // playerSprite: new ex.ImageSource('./assets/sprites/player.png'),
-  // enemySprite: new ex.ImageSource('./assets/sprites/enemy.png'),
+  playerIdle: new ex.ImageSource('/src/assets/character/Idle.png'),
 };
 
 // Maps/Tilemaps

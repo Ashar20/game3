@@ -26,12 +26,13 @@ export class GameScene extends ex.Scene {
       );
     }
 
-    // Create and add player
-    this.player = new Player(
-      320, // Start player at center of map
-      160  // Start player at center of map
-    );
+    // Create and add player in a clear soil area (left of top-left mine entrance)
+    // Position: ~3 tiles from left (48px), ~5 tiles from top (80px)
+    this.player = new Player(48, 80);
+    
+    // Ensure player renders on top of map layers
     this.add(this.player);
+    this.player.z = 100; // High z-index to render above map
 
     // Set up camera to follow player
     this.camera.strategy.lockToActor(this.player);
