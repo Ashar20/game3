@@ -2,9 +2,8 @@
 # This file can be used to configure Torii indexer settings
 
 [world]
-# World address will be set automatically during migration
-# You can override it here if needed
-# address = "0x..."
+# World address - should match manifest_dev.json
+address = "0x510876811c1ae4530fee91f1425a8890d1c2f1c88571440159efdd7bb3f796f"
 
 [server]
 # Torii server configuration
@@ -28,4 +27,6 @@ start = 0
 # Redis configuration (if using Redis for caching)
 # [redis]
 # url = "redis://localhost:6379"
+
+
 
