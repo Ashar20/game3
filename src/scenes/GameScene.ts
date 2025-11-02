@@ -1,7 +1,12 @@
 import * as ex from 'excalibur';
 import { Player } from '../actors/Player';
+import { Coin } from '../actors/Coin';
+import { MoleEnemy } from '../actors/MoleEnemy';
+import { Projectile } from '../actors/Projectile';
+import { PlayerArrow } from '../actors/PlayerArrow';
 import { Maps, Images } from '../resources';
 import { SimpleInventoryHUD } from '../ui/SimpleInventoryHUD';
+import { HealthHUD } from '../ui/HealthHUD';
 
 /**
  * Main game scene with player and game logic
@@ -9,6 +14,12 @@ import { SimpleInventoryHUD } from '../ui/SimpleInventoryHUD';
 export class GameScene extends ex.Scene {
   private player!: Player;
   private inventoryHUD!: SimpleInventoryHUD;
+  private healthHUD!: HealthHUD;
+  private coins: Coin[] = [];
+  private moles: MoleEnemy[] = [];
+  private projectiles: Projectile[] = [];
+  private playerArrows: PlayerArrow[] = [];
+  private moleSpawnTimer: number = 0;
 
   onInitialize(_engine: ex.Engine): void {
     console.log('GameScene initializing...');
@@ -62,15 +73,254 @@ export class GameScene extends ex.Scene {
     // Set camera zoom to 500% (5x)
     this.camera.zoom = 5;
 
+    // Set up player arrow callback
+    this.player.setArrowCallback(
+      (fromPos, direction) => this.spawnPlayerArrow(fromPos, direction)
+    );
+
+    // Initialize health HUD
+    this.healthHUD = new HealthHUD();
+    this.healthHUD.initialize(this, _engine);
+
     // Initialize inventory HUD
     this.inventoryHUD = new SimpleInventoryHUD();
     this.inventoryHUD.initialize(this, _engine);
+
+    // Set up drop item callbacks
+    this.inventoryHUD.setItemDropCallbacks(
+      (itemType, position) => this.handleItemDrop(itemType, position),
+      () => this.getPlayerPosition(),
+      (itemType) => this.countSceneItems(itemType)
+    );
+
+    // Spawn some coins on the map
+    this.spawnCoins();
+  }
+
+  private spawnCoins(): void {
+    // Wait for money image to be loaded
+    const loadMoney = Images.money.isLoaded()
+      ? Promise.resolve()
+      : Images.money.load();
+
+    loadMoney.then(() => {
+      // Spawn coins at various locations on the map
+      const coinPositions = [
+        { x: 80, y: 80 },    // Near player start
+        { x: 150, y: 100 },  // Top area
+        { x: 200, y: 150 },  // Middle area
+        { x: 350, y: 120 },  // Right side
+        { x: 450, y: 180 },  // Bottom right
+        { x: 100, y: 200 },  // Bottom left
+      ];
+
+      coinPositions.forEach(pos => {
+        const coin = new Coin(pos.x, pos.y);
+        this.add(coin);
+        this.coins.push(coin);
+      });
+    });
+  }
+
+  private collectCoin(coin: Coin): void {
+    console.log('collectCoin called for coin at', coin.pos);
+    // Check if coin is still in the scene (not already collected)
+    if (!coin.scene) {
+      console.log('Coin already collected, returning');
+      return;
+    }
+
+    // Create sprite for inventory
+    const moneyImage = Images.money;
+    const spriteSheet = ex.SpriteSheet.fromImageSource({
+      image: moneyImage,
+      grid: {
+        rows: 1,
+        columns: 6,
+        spriteWidth: 16,
+        spriteHeight: 16,
+      },
+    });
+    
+    // Create animation from first frame
+    const coinAnimation = ex.Animation.fromSpriteSheet(spriteSheet, [0], 100);
+    const coinSprite = coinAnimation.frames[0]?.graphic as ex.Sprite;
+
+    // Add to inventory
+    if (coinSprite) {
+      const success = this.inventoryHUD.addItem({
+        type: 'coin',
+        sprite: coinSprite,
+        count: 1,
+      });
+
+      if (success) {
+        // Remove coin from scene
+        coin.kill();
+        console.log('Coin collected successfully!');
+      } else {
+        console.log('Failed to add coin to inventory - inventory full?');
+      }
+    } else {
+      console.log('Failed to create coin sprite');
+    }
+  }
+
+  onPreUpdate(_engine: ex.Engine, delta: number): void {
+    // Check for coin collection by distance
+    const pickupDistance = 20; // pixels
+    this.coins.forEach(coin => {
+      if (coin.scene && coin.canBeCollected) { // Make sure coin is still alive and can be collected
+        const distance = coin.pos.distance(this.player.pos);
+        if (distance < pickupDistance) {
+          this.collectCoin(coin);
+        }
+      }
+    });
+
+    // Spawn moles randomly
+    this.moleSpawnTimer += delta;
+    if (this.moleSpawnTimer >= 3000 && this.moles.length < 3) { // Spawn every 3 seconds, max 3 moles
+      this.spawnRandomMole();
+      this.moleSpawnTimer = 0;
+    }
+
+    // Clean up dead moles
+    this.moles = this.moles.filter(mole => mole.scene);
+    
+    // Clean up dead projectiles
+    this.projectiles = this.projectiles.filter(proj => proj.scene);
+    
+    // Clean up dead player arrows
+    this.playerArrows = this.playerArrows.filter(arrow => arrow.scene);
+    
+    // Check for arrow hitting moles
+    this.playerArrows.forEach(arrow => {
+      if (arrow.scene) {
+        this.moles.forEach(mole => {
+          if (mole.scene && !mole.isDead()) {
+            const distance = arrow.pos.distance(mole.pos);
+            if (distance < 16) { // Hit detection radius
+              console.log('Arrow hit mole!');
+              mole.takeDamage(arrow.getDamage());
+              arrow.kill();
+            }
+          }
+        });
+      }
+    });
+
+    // Check for enemy projectiles hitting player
+    this.projectiles.forEach(projectile => {
+      if (projectile.scene) {
+        const distance = projectile.pos.distance(this.player.pos);
+        if (distance < 16) { // Hit detection radius
+          console.log('Enemy projectile hit player!');
+          this.player.takeDamage(1);
+          projectile.kill();
+        }
+      }
+    });
+
+    // Update health HUD
+    if (this.healthHUD) {
+      this.healthHUD.updateHealth(this.player.getHealth(), this.player.getMaxHealth(), this.player.pos);
+    }
+
+    // Update mole health bar positions
+    this.moles.forEach(mole => {
+      mole.updateHealthBarPosition();
+    });
+  }
+
+  private spawnRandomMole(): void {
+    // Spawn mole at random position on the map
+    const mapWidth = 40 * 16; // 640 pixels
+    const mapHeight = 20 * 16; // 320 pixels
+    
+    const x = Math.random() * mapWidth;
+    const y = Math.random() * mapHeight;
+    
+    const mole = new MoleEnemy(x, y);
+    
+    // Set up projectile callback
+    mole.setProjectileCallback(
+      (fromPos, toPos) => this.spawnProjectile(fromPos, toPos),
+      () => this.player.pos.clone()
+    );
+    
+    this.add(mole);
+    this.moles.push(mole);
+    console.log(`Spawned mole at ${x}, ${y}`);
+  }
+
+  private spawnProjectile(fromPos: ex.Vector, toPos: ex.Vector): void {
+    const projectile = new Projectile(fromPos, toPos);
+    this.add(projectile);
+    this.projectiles.push(projectile);
+    console.log(`Spawned projectile from ${fromPos} to ${toPos}`);
+  }
+
+  private spawnPlayerArrow(fromPos: ex.Vector, direction: ex.Vector): void {
+    const arrow = new PlayerArrow(fromPos, direction);
+    this.add(arrow);
+    this.playerArrows.push(arrow);
+    console.log(`Spawned player arrow from ${fromPos} in direction ${direction}`);
+  }
+
+  private handleItemDrop(itemType: string, position: ex.Vector): void {
+    if (itemType === 'coin') {
+      // Spawn a new coin at the drop position
+      const coin = new Coin(position.x, position.y);
+      this.add(coin);
+      this.coins.push(coin);
+      console.log(`Dropped ${itemType} at ${position.x}, ${position.y}`);
+    }
+  }
+
+  private getPlayerPosition(): ex.Vector {
+    // Get player position with 6px offset based on facing direction
+    const playerPos = this.player.pos.clone();
+    const offsetDistance = 6; // pixels away from player
+    
+    // Get facing direction from player
+    const facingDirection = (this.player as any).lastFacingDirection || 'down';
+    
+    // Calculate offset based on direction
+    let offsetX = 0;
+    let offsetY = 0;
+    
+    switch (facingDirection) {
+      case 'down':
+        offsetY = offsetDistance;
+        break;
+      case 'up':
+        offsetY = -offsetDistance;
+        break;
+      case 'right':
+        offsetX = offsetDistance;
+        break;
+      case 'left':
+        offsetX = -offsetDistance;
+        break;
+      default:
+        offsetY = offsetDistance; // Default to down
+    }
+    
+    return new ex.Vector(playerPos.x + offsetX, playerPos.y + offsetY);
+  }
+
+  private countSceneItems(itemType: string): number {
+    if (itemType === 'coin') {
+      return this.coins.filter(coin => coin.scene).length;
+    }
+    return 0;
   }
 
   onPostDraw(ctx: ex.ExcaliburGraphicsContext, _delta: number): void {
     // Draw inventory HUD on top of everything
     if (this.inventoryHUD) {
-      this.inventoryHUD.draw(ctx);
+      this.inventoryHUD.draw(ctx, this.player);
     }
   }
 
