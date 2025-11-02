@@ -4,15 +4,48 @@
  *
  * This example uses Katana for local host development.
  */
-import manifest from '../contracts/manifest_dev.json' assert { type: 'json' };
+import manifest from '../contracts/manifest_dev.json' with { type: 'json' };
 
-const actionsContract = manifest.contracts.find((contract) => contract.tag === 'di-actions');
-const worldSystemContract = manifest.contracts.find((contract) => contract.tag === 'di-world_system');
-const gameSystemContract = manifest.contracts.find((contract) => contract.tag === 'di-game_system');
+interface Contract {
+  tag: string;
+  address: string;
+}
+
+interface Manifest {
+  contracts: Contract[];
+}
+
+interface Method {
+  name: string;
+  entrypoint: string;
+  description: string;
+}
+
+interface ContractPolicy {
+  name?: string;
+  description?: string;
+  methods: Array<Method | { entrypoint: string }>;
+}
+
+interface ContractPolicies {
+  [address: string]: ContractPolicy;
+}
+
+interface ControllerOpts {
+  chains: Array<{ rpcUrl: string }>;
+  defaultChainId: string;
+  policies: {
+    contracts: ContractPolicies;
+  };
+}
+
+const actionsContract = (manifest as Manifest).contracts.find((contract) => contract.tag === 'di-actions');
+const worldSystemContract = (manifest as Manifest).contracts.find((contract) => contract.tag === 'di-world_system');
+const gameSystemContract = (manifest as Manifest).contracts.find((contract) => contract.tag === 'di-game_system');
 const VRF_PROVIDER_ADDRESS = '0x15f542e25a4ce31481f986888c179b6e57412be340b8095f72f75a328fbb27b';
 
 // Build contracts object only for contracts that exist
-const contractPolicies = {};
+const contractPolicies: ContractPolicies = {};
 
 if (actionsContract && actionsContract.address) {
   contractPolicies[actionsContract.address] = {
@@ -110,7 +143,7 @@ contractPolicies[VRF_PROVIDER_ADDRESS] = {
   methods: [{ entrypoint: 'request_random' }],
 };
 
-const controllerOpts = {
+const controllerOpts: ControllerOpts = {
   chains: [{ rpcUrl: 'http://localhost:5050' }],
   // "KATANA"
   defaultChainId: '0x4b4154414e41',
@@ -120,3 +153,4 @@ const controllerOpts = {
 };
 
 export default controllerOpts;
+
