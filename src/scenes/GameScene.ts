@@ -1,6 +1,9 @@
 import * as ex from 'excalibur';
 import { Player } from '../actors/Player';
 import { Coin } from '../actors/Coin';
+import { MoleEnemy } from '../actors/MoleEnemy';
+import { Projectile } from '../actors/Projectile';
+import { PlayerArrow } from '../actors/PlayerArrow';
 import { Maps, Images } from '../resources';
 import { SimpleInventoryHUD } from '../ui/SimpleInventoryHUD';
 
@@ -11,6 +14,10 @@ export class GameScene extends ex.Scene {
   private player!: Player;
   private inventoryHUD!: SimpleInventoryHUD;
   private coins: Coin[] = [];
+  private moles: MoleEnemy[] = [];
+  private projectiles: Projectile[] = [];
+  private playerArrows: PlayerArrow[] = [];
+  private moleSpawnTimer: number = 0;
 
   onInitialize(_engine: ex.Engine): void {
     console.log('GameScene initializing...');
@@ -63,6 +70,11 @@ export class GameScene extends ex.Scene {
 
     // Set camera zoom to 500% (5x)
     this.camera.zoom = 5;
+
+    // Set up player arrow callback
+    this.player.setArrowCallback(
+      (fromPos, direction) => this.spawnPlayerArrow(fromPos, direction)
+    );
 
     // Initialize inventory HUD
     this.inventoryHUD = new SimpleInventoryHUD();
@@ -148,7 +160,7 @@ export class GameScene extends ex.Scene {
     }
   }
 
-  onPreUpdate(_engine: ex.Engine, _delta: number): void {
+  onPreUpdate(_engine: ex.Engine, delta: number): void {
     // Check for coin collection by distance
     const pickupDistance = 20; // pixels
     this.coins.forEach(coin => {
@@ -159,6 +171,73 @@ export class GameScene extends ex.Scene {
         }
       }
     });
+
+    // Spawn moles randomly
+    this.moleSpawnTimer += delta;
+    if (this.moleSpawnTimer >= 3000 && this.moles.length < 3) { // Spawn every 3 seconds, max 3 moles
+      this.spawnRandomMole();
+      this.moleSpawnTimer = 0;
+    }
+
+    // Clean up dead moles
+    this.moles = this.moles.filter(mole => mole.scene);
+    
+    // Clean up dead projectiles
+    this.projectiles = this.projectiles.filter(proj => proj.scene);
+    
+    // Clean up dead player arrows
+    this.playerArrows = this.playerArrows.filter(arrow => arrow.scene);
+    
+    // Check for arrow hitting moles
+    this.playerArrows.forEach(arrow => {
+      if (arrow.scene) {
+        this.moles.forEach(mole => {
+          if (mole.scene && !mole.isDead()) {
+            const distance = arrow.pos.distance(mole.pos);
+            if (distance < 16) { // Hit detection radius
+              console.log('Arrow hit mole!');
+              mole.takeDamage(arrow.getDamage());
+              arrow.kill();
+            }
+          }
+        });
+      }
+    });
+  }
+
+  private spawnRandomMole(): void {
+    // Spawn mole at random position on the map
+    const mapWidth = 40 * 16; // 640 pixels
+    const mapHeight = 20 * 16; // 320 pixels
+    
+    const x = Math.random() * mapWidth;
+    const y = Math.random() * mapHeight;
+    
+    const mole = new MoleEnemy(x, y);
+    
+    // Set up projectile callback
+    mole.setProjectileCallback(
+      (fromPos, toPos) => this.spawnProjectile(fromPos, toPos),
+      () => this.player.pos.clone()
+    );
+    
+    this.add(mole);
+    this.moles.push(mole);
+    console.log(`Spawned mole at ${x}, ${y}`);
+  }
+
+  private spawnProjectile(fromPos: ex.Vector, toPos: ex.Vector): void {
+    const projectile = new Projectile(fromPos, toPos);
+    this.add(projectile);
+    this.projectiles.push(projectile);
+    console.log(`Spawned projectile from ${fromPos} to ${toPos}`);
+  }
+
+  private spawnPlayerArrow(fromPos: ex.Vector, direction: ex.Vector): void {
+    const arrow = new PlayerArrow(fromPos, direction);
+    this.add(arrow);
+    this.playerArrows.push(arrow);
+    console.log(`Spawned player arrow from ${fromPos} in direction ${direction}`);
   }
 
   private handleItemDrop(itemType: string, position: ex.Vector): void {
