@@ -1,0 +1,32 @@
+# Torii Configuration
+# This file can be used to configure Torii indexer settings
+
+[world]
+# World address - should match manifest_dev.json
+address = "0x510876811c1ae4530fee91f1425a8890d1c2f1c88571440159efdd7bb3f796f"
+
+[server]
+# Torii server configuration
+http_port = 8080
+websocket_port = 8080
+host = "0.0.0.0"
+
+[manifest]
+# Path to manifest file
+path = "./manifest_dev.json"
+
+# Indexing configuration
+[blocks]
+start = 0
+# end = 1000  # Uncomment to limit block range
+
+# Database configuration (if using SQLite)
+# [database]
+# url = "sqlite:./torii.db"
+
+# Redis configuration (if using Redis for caching)
+# [redis]
+# url = "redis://localhost:6379"
+
+
+
