@@ -132,6 +132,13 @@
             outline: none;
         }
 
+        /* Make Excalibur canvas render above background */
+        canvas {
+            position: relative;
+            z-index: 5;
+            display: block;
+        }
+
         .pixel-button:hover {
             transform: scale(1.05) translateY(-4px);
             box-shadow: 0 8px 16px rgba(0, 0, 0, 0.5), inset 0 -4px 0 rgba(0, 0, 0, 0.4);
@@ -144,6 +151,14 @@
 
         .btn-play {
             background: linear-gradient(to bottom, #fbbf24, #d97706);
+        }
+
+        /* Hero Start button sizing */
+        #play-btn {
+            font-size: 22px;
+            padding: 24px 48px;
+            max-width: 520px;
+            letter-spacing: 2px;
         }
 
         .btn-join {
@@ -228,11 +243,12 @@
         <!-- Cartridge Login (shown first) -->
         <div class="login-container" id="login-container">
             <button class="pixel-button btn-play" id="connect-btn">CONNECT ACCOUNT</button>
+            <button class="pixel-button btn-leaderboard" id="quick-play-btn">OPEN EXCALIBUR</button>
         </div>
 
         <!-- Main buttons (hidden until connected) -->
         <div class="buttons-container" id="main-buttons" style="display:none;">
-            <button class="pixel-button btn-play" id="play-btn">PLAY GAME</button>
+            <button class="pixel-button btn-play" id="play-btn">START HEIST</button>
             <button class="pixel-button btn-join" id="join-btn">JOIN</button>
             <button class="pixel-button btn-leaderboard" id="leaderboard-btn">LEADERBOARD</button>
         </div>
@@ -332,11 +348,14 @@
                     // status is normalized to number; 1 means started
                     if (status === 1) {
                         stopStatusPolling();
-                        // enter game like before
+                        // enter game like before; keep background visible for immersive backdrop
                         const container = document.querySelector('.container');
-                        const background = document.querySelector('.background');
                         if (container) container.style.display = 'none';
-                        if (background) background.style.display = 'none';
+                        // swap background to clouds for in-game vibe
+                        const bgEl = document.querySelector('.background');
+                        if (bgEl && bgEl instanceof HTMLElement) {
+                            bgEl.style.backgroundImage = "url('/cloud.gif')";
+                        }
                         if (!gameStarted) {
                             const gameModule = await import('./src/game.ts');
                             game = await gameModule.createAndStartGame();
@@ -366,6 +385,24 @@
             // Open create game modal
             const backdrop = document.getElementById('create-game-backdrop');
             if (backdrop) backdrop.style.display = 'flex';
+        }
+
+        async function handleQuickPlay() {
+            try {
+                const container = document.querySelector('.container');
+                if (container) container.style.display = 'none';
+                const bgEl = document.querySelector('.background');
+                if (bgEl && bgEl instanceof HTMLElement) {
+                    bgEl.style.backgroundImage = "url('/cloud.gif')";
+                }
+                if (!gameStarted) {
+                    const gameModule = await import('./src/game.ts');
+                    game = await gameModule.createAndStartGame();
+                    gameStarted = true;
+                }
+            } catch (e) {
+                console.error('[UI] quick play failed', e);
+            }
         }
         
         function handleButtonClick(buttonName) {
@@ -409,6 +446,7 @@
         // Set up event listeners after DOM is ready
         document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('connect-btn').addEventListener('click', handleConnect);
+            document.getElementById('quick-play-btn').addEventListener('click', handleQuickPlay);
             document.getElementById('play-btn').addEventListener('click', handlePlayGame);
             document.getElementById('join-btn').addEventListener('click', () => {
                 const jb = document.getElementById('join-game-backdrop');
