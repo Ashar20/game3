@@ -27,11 +27,38 @@
             left: 0;
             width: 100vw;
             height: 100vh;
-            background-image: url('https://hebbkx1anhila5yf.public.blob.vercel-storage.com/aed270d5c8298401023cc69519842875.gif-DL2xnZHahvohtjCJWu83qNLT4W1Im4.jpeg');
+            background-image: url('/harvest-heist-bg.gif');
             background-size: cover;
             background-position: center;
             background-repeat: no-repeat;
             z-index: 1;
+            /* More pronounced parallax float */
+            transform: scale(1.08);
+            will-change: transform, background-position;
+            animation: bg-float 8s ease-in-out infinite alternate;
+        }
+
+        @keyframes bg-float {
+            0% {
+                transform: translate3d(0, 0, 0) scale(1.08);
+                background-position: 50% 50%;
+            }
+            25% {
+                transform: translate3d(-20px, -12px, 0) scale(1.09);
+                background-position: 46% 54%;
+            }
+            50% {
+                transform: translate3d(16px, 20px, 0) scale(1.08);
+                background-position: 54% 46%;
+            }
+            75% {
+                transform: translate3d(-10px, 18px, 0) scale(1.1);
+                background-position: 48% 52%;
+            }
+            100% {
+                transform: translate3d(22px, -10px, 0) scale(1.08);
+                background-position: 52% 48%;
+            }
         }
 
         .container {
