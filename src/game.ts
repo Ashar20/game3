@@ -19,6 +19,7 @@ class Game extends ex.Engine {
       height: viewportHeight,
       displayMode: ex.DisplayMode.FillScreen,
       pixelArt: false,
+      backgroundColor: ex.Color.Transparent,
       physics: {
         enabled: true,
         gravity: ex.Vector.Zero, // No gravity for top-down game
