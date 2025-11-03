@@ -1,6 +1,8 @@
 import * as ex from 'excalibur';
 import { ResourceLoader } from './resources';
-import { GameScene } from './scenes/GameScene';
+import { GameScene, setGameEngine as setGameEngineForGame } from './scenes/GameScene';
+import { UpgradeMenuScene, setGameEngine as setGameEngineForUpgrade } from './scenes/UpgradeMenuScene';
+import { RoomScene, setGameEngine as setGameEngineForRoom } from './scenes/RoomScene';
 import { MainScene } from './scenes/MainScene';
 
 /**
@@ -17,6 +19,7 @@ class Game extends ex.Engine {
       height: viewportHeight,
       displayMode: ex.DisplayMode.FillScreen,
       pixelArt: false,
+      backgroundColor: ex.Color.Transparent,
       physics: {
         enabled: true,
         gravity: ex.Vector.Zero, // No gravity for top-down game
@@ -31,29 +34,36 @@ class Game extends ex.Engine {
   }
 
   public start(): Promise<void> {
-    // Register scenes
-    this.add('main', new MainScene());
+    // Register scenes - add 'game' first so it becomes the default
     this.add('game', new GameScene());
+    this.add('upgrade', new UpgradeMenuScene());
+    this.add('room', new RoomScene(new ex.Vector(240, 280))); // Default entry position
+    this.add('main', new MainScene());
     
-    // Start with main scene immediately so something shows
-    this.goToScene('main');
+    // Set the game engine reference for scene transitions
+    setGameEngineForGame(this);
+    setGameEngineForUpgrade(this);
+    setGameEngineForRoom(this);
 
     // Start the game with the loader
     // All resources will be loaded before the game starts
     return super.start(ResourceLoader).then(() => {
-      console.log('Resources loaded, switching to game scene');
-      // Switch to the game scene after resources are loaded
+      console.log('Resources loaded');
+      // Switch to game scene after resources load
       this.goToScene('game');
     }).catch((error) => {
       console.error('Error starting game:', error);
-      // Even if resources fail, at least show the main scene
-      this.goToScene('main');
+      // Even if resources fail, at least show the game scene
+      this.goToScene('game');
     });
   }
 }
 
-// Initialize and start the game
-const game = new Game();
-game.start().catch(console.error);
+// Export game class instead of auto-starting
+export { Game };
 
-export { game };
+// Export a function to start the game when needed
+export function createAndStartGame(): Promise<void> {
+  const game = new Game();
+  return game.start().catch(console.error);
+}
