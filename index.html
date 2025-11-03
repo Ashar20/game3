@@ -77,6 +77,16 @@
             max-width: 400px;
         }
 
+        /* Login container, same layout spacing */
+        .login-container {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            width: 100%;
+            max-width: 400px;
+            align-items: center;
+        }
+
         .pixel-button {
             padding: 16px 32px;
             width: 100%;
@@ -137,7 +147,13 @@
             <p class="subtitle">STEAL THE CROPS</p>
         </div>
 
-        <div class="buttons-container">
+        <!-- Cartridge Login (shown first) -->
+        <div class="login-container" id="login-container">
+            <button class="pixel-button btn-play" id="connect-btn">CONNECT WALLET</button>
+        </div>
+
+        <!-- Main buttons (hidden until connected) -->
+        <div class="buttons-container" id="main-buttons" style="display:none;">
             <button class="pixel-button btn-play" id="play-btn">PLAY GAME</button>
             <button class="pixel-button btn-join" id="join-btn">JOIN</button>
             <button class="pixel-button btn-leaderboard" id="leaderboard-btn">LEADERBOARD</button>
@@ -145,8 +161,12 @@
     </div>
 
     <script type="module">
+        import Controller from '@cartridge/controller';
+        import controllerOpts from './controller.ts';
+
         let gameStarted = false;
         let game = null;
+        const controller = new Controller(controllerOpts);
         
         async function handlePlayGame() {
             console.log('Play Game button clicked');
@@ -168,8 +188,32 @@
             alert(buttonName + ' functionality coming soon!');
         }
         
+        function showMainButtons() {
+            const login = document.getElementById('login-container');
+            const main = document.getElementById('main-buttons');
+            if (login) login.style.display = 'none';
+            if (main) main.style.display = 'flex';
+        }
+
+        async function handleConnect() {
+            try {
+                const account = await controller.connect();
+                const btn = document.getElementById('connect-btn');
+                if (btn) {
+                    btn.textContent = 'CONNECTED';
+                    btn.style.filter = 'brightness(1.05)';
+                }
+                showMainButtons();
+                console.log('Connected account:', account?.address);
+            } catch (err) {
+                console.error('Cartridge connect failed:', err);
+                alert('Connection failed. Please try again.');
+            }
+        }
+
         // Set up event listeners after DOM is ready
         document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('connect-btn').addEventListener('click', handleConnect);
             document.getElementById('play-btn').addEventListener('click', handlePlayGame);
             document.getElementById('join-btn').addEventListener('click', () => handleButtonClick('Join'));
             document.getElementById('leaderboard-btn').addEventListener('click', () => handleButtonClick('Leaderboard'));

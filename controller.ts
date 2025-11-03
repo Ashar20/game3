@@ -4,7 +4,7 @@
  *
  * This example uses Katana for local host development.
  */
-import manifest from '../contracts/manifest_dev.json' with { type: 'json' };
+import manifest from './contracts/manifest_dev.json' assert { type: 'json' };
 
 interface Contract {
   tag: string;
