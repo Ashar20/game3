@@ -838,6 +838,41 @@ async function getGameStatus(gameId: string): Promise<number | null> {
   }
 }
 
+// Determine participant index (0 for participant_a, 1 for participant_b)
+async function getParticipantIndex(gameId: string, accountAddress: string): Promise<'0' | '1' | null> {
+  try {
+    const query = `
+      query GetGames {
+        diGameModels {
+          edges { node { game_id participant_a participant_b } }
+        }
+      }
+    `;
+    const response = await fetch('https://api.cartridge.gg/x/harvest/torii/graphql', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query }),
+    });
+    const result: GraphQLResponse = await response.json();
+    if (!result.data || !result.data.diGameModels) return null;
+    const games = result.data.diGameModels.edges.map(edge => edge.node);
+    const target = Number(gameId);
+    const match = games.find(g => {
+      const rawId = String(g.game_id);
+      const numericId = rawId.startsWith('0x') || rawId.startsWith('0X') ? parseInt(rawId, 16) : parseInt(rawId, 10);
+      return numericId === target;
+    });
+    if (!match) return null;
+    const addr = String(accountAddress).toLowerCase();
+    if (typeof match.participant_a === 'string' && match.participant_a.toLowerCase() === addr) return '0';
+    if (typeof match.participant_b === 'string' && match.participant_b.toLowerCase() === addr) return '1';
+    return null;
+  } catch (e) {
+    console.error('getParticipantIndex error:', e);
+    return null;
+  }
+}
+
 async function queryCollectedAssets(_torii: ToriiClient, gameId: string): Promise<any> {
   try {
     // Query all collected assets, then filter client-side
@@ -1068,5 +1103,5 @@ async function queryPlayerAssets(_torii: ToriiClient, playerId: string): Promise
   }
 }
 
-export { initGame, updateFromEntitiesData, queryWorlds, createGame, joinGame, startGame, getLatestCreatedGameId, getGameStatus };
+export { initGame, updateFromEntitiesData, queryWorlds, createGame, joinGame, startGame, getLatestCreatedGameId, getGameStatus, collectAsset, hit, getParticipantIndex, movePlayer };
 

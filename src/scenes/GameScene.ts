@@ -1,12 +1,15 @@
 import * as ex from 'excalibur';
 import { Player } from '../actors/Player';
+import { RemotePlayer } from '../actors/RemotePlayer';
 import { Coin } from '../actors/Coin';
 import { Crop } from '../actors/Crop';
 import { MoleEnemy } from '../actors/MoleEnemy';
 import { Projectile } from '../actors/Projectile';
 import { PlayerArrow } from '../actors/PlayerArrow';
 import { Maps, Images } from '../resources';
+import { movePlayer } from '/cartridge-game.ts';
 import { SimpleInventoryHUD } from '../ui/SimpleInventoryHUD';
+import { collectAsset, hit } from '/cartridge-game.ts';
 import { HealthHUD } from '../ui/HealthHUD';
 import { setPlayerStats, applyUpgrades, getPlayerStats } from './UpgradeMenuScene';
 
@@ -22,6 +25,7 @@ export function setGameEngine(engine: ex.Engine) {
  */
 export class GameScene extends ex.Scene {
   private player!: Player;
+  private remotePlayer!: RemotePlayer;
   private inventoryHUD!: SimpleInventoryHUD;
   private healthHUD!: HealthHUD;
   private coins: Coin[] = [];
@@ -45,6 +49,9 @@ export class GameScene extends ex.Scene {
   private warningTextActor!: ex.Actor;
   private warningShadowActor!: ex.Actor; // Shadow actor for warning
   private hasShownWarning: boolean = false;
+  private lastSentAt: number = 0;
+  private lastSentPos: { x: number; y: number } = { x: 0, y: 0 };
+  private toriiPollHandle: number | null = null;
 
   onInitialize(_engine: ex.Engine): void {
     console.log('GameScene initializing...');
@@ -137,6 +144,13 @@ export class GameScene extends ex.Scene {
     
     // Setup timer UI
     this.setupTimerUI(_engine);
+    // Create remote player actor (simple marker)
+    this.remotePlayer = new RemotePlayer(0, 0);
+    this.remotePlayer.z = Number.MAX_SAFE_INTEGER - 1;
+    this.add(this.remotePlayer);
+
+    // Start Torii position polling (every 1s)
+    this.startToriiPositionPolling();
     
     // Get time limit from upgrade menu (or use default)
     const stats = getPlayerStats();
@@ -411,6 +425,14 @@ export class GameScene extends ex.Scene {
         // Remove coin from scene
         coin.kill();
         console.log('Coin collected successfully!');
+        // On-chain collect asset for coins -> asset_id 1
+        try {
+          const chain: any = (window as any).__chain;
+          const gameId = localStorage.getItem('game_id');
+          if (chain && chain.account && chain.manifest && gameId) {
+            collectAsset(chain.account, chain.manifest, String(gameId), '1').catch(console.error);
+          }
+        } catch {}
       } else {
         console.log('Failed to add coin to inventory - inventory full?');
       }
@@ -504,6 +526,19 @@ export class GameScene extends ex.Scene {
             // Remove crop from scene
             crop.kill();
             console.log('Crop harvested successfully!');
+            // Map crop type to asset id: small=2 (crop1-6), big=3 (crop7-12), others=4
+            try {
+              const chain: any = (window as any).__chain;
+              const gameId = localStorage.getItem('game_id');
+              if (chain && chain.account && chain.manifest && gameId) {
+                const num = parseInt(cropType.replace('crop', ''), 10);
+                let assetId = 4;
+                if (!isNaN(num)) {
+                  if (num >= 1 && num <= 6) assetId = 2; else if (num >= 7 && num <= 12) assetId = 3; else assetId = 4;
+                }
+                collectAsset(chain.account, chain.manifest, String(gameId), String(assetId)).catch(console.error);
+              }
+            } catch {}
           } else {
             console.log('Failed to add crop to inventory - inventory full?');
           }
@@ -530,6 +565,22 @@ export class GameScene extends ex.Scene {
     const playerHalfSize = 8;
     this.player.pos.x = Math.max(playerHalfSize, Math.min(this.mapWidth - playerHalfSize, this.player.pos.x));
     this.player.pos.y = Math.max(playerHalfSize, Math.min(this.mapHeight - playerHalfSize, this.player.pos.y));
+
+    // Throttled push of local position to chain (every 500ms when changed >1px)
+    try {
+      const now = performance.now();
+      const chain: any = (window as any).__chain;
+      const gameId = localStorage.getItem('game_id');
+      if (chain && chain.account && chain.manifest && gameId) {
+        const dx = Math.abs(this.player.pos.x - this.lastSentPos.x);
+        const dy = Math.abs(this.player.pos.y - this.lastSentPos.y);
+        if (now - this.lastSentAt > 500 && (dx > 1 || dy > 1)) {
+          this.lastSentAt = now;
+          this.lastSentPos = { x: this.player.pos.x, y: this.player.pos.y };
+          movePlayer(chain.account, chain.manifest, String(gameId), String(Math.round(this.player.pos.x)), String(Math.round(this.player.pos.y))).catch(() => {});
+        }
+      }
+    } catch {}
 
         // Check for door to upgrade menu
         // Door is at tile position (26, 2-3) and (27, 2-3) in doors layer
@@ -670,6 +721,15 @@ export class GameScene extends ex.Scene {
         if (distance < 16) { // Hit detection radius
           console.log('Enemy projectile hit player!');
           this.player.takeDamage(1);
+          // On-chain hit transaction with amount 10
+          try {
+            const chain: any = (window as any).__chain;
+            const gameId = localStorage.getItem('game_id');
+            if (chain && chain.account && chain.manifest && gameId) {
+              const p = chain.participantIndex === '1' ? '1' : '0';
+              hit(chain.account, chain.manifest, String(gameId), p, '10').catch(console.error);
+            }
+          } catch {}
           projectile.kill();
         }
       }
@@ -782,6 +842,51 @@ export class GameScene extends ex.Scene {
       return this.coins.filter(coin => coin.scene).length;
     }
     return 0;
+  }
+
+  private startToriiPositionPolling(): void {
+    const poll = async () => {
+      try {
+        const chain: any = (window as any).__chain;
+        const gameId = localStorage.getItem('game_id');
+        if (!chain || !gameId) return;
+        const query = `
+          query GetGames {
+            diGameModels {
+              edges { node { game_id position_a_x position_a_y position_b_x position_b_y participant_a participant_b } }
+            }
+          }
+        `;
+        const res = await fetch('https://api.cartridge.gg/x/harvest/torii/graphql', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query })
+        });
+        const json = await res.json();
+        const edges = json?.data?.diGameModels?.edges || [];
+        const targetId = Number(gameId);
+        const node = edges.map((e: any) => e.node).find((n: any) => {
+          const raw = String(n.game_id);
+          const num = raw.startsWith('0x') || raw.startsWith('0X') ? parseInt(raw, 16) : parseInt(raw, 10);
+          return num === targetId;
+        });
+        if (!node) return;
+        const p = chain.participantIndex === '1' ? '1' : '0';
+        const ax = Number(node.position_a_x) || 0;
+        const ay = Number(node.position_a_y) || 0;
+        const bx = Number(node.position_b_x) || 0;
+        const by = Number(node.position_b_y) || 0;
+        // Only update the OTHER participant from Torii
+        if (p === '0') {
+          this.remotePlayer.setRemotePosition(bx, by);
+        } else {
+          this.remotePlayer.setRemotePosition(ax, ay);
+        }
+      } catch (e) {
+        // swallow errors to keep polling
+      }
+    };
+    // initial + interval
+    poll();
+    this.toriiPollHandle = window.setInterval(poll, 1000);
   }
 
   onPostDraw(ctx: ex.ExcaliburGraphicsContext, _delta: number): void {
@@ -1129,6 +1234,10 @@ export class GameScene extends ex.Scene {
 
   onDeactivate(): void {
     console.log('GameScene deactivated');
+    if (this.toriiPollHandle) {
+      window.clearInterval(this.toriiPollHandle);
+      this.toriiPollHandle = null;
+    }
   }
   
   private updateTimer(delta: number): void {

@@ -330,9 +330,10 @@
         import Controller from '@cartridge/controller';
         import controllerOpts from './controller.ts';
         import manifest from './contracts/manifest_dev.json' assert { type: 'json' };
-        import { createGame, joinGame, startGame, getLatestCreatedGameId, getGameStatus } from './cartridge-game.ts';
+        import { createGame, joinGame, startGame, getLatestCreatedGameId, getGameStatus, getParticipantIndex } from './cartridge-game.ts';
 
         let gameStarted = false;
+        let gameStarting = false;
         let game = null;
         const controller = new Controller(controllerOpts);
         
@@ -347,6 +348,19 @@
                     console.log('[UI] Poll status for gameId(dec)', String(gameId), '=>', status);
                     // status is normalized to number; 1 means started
                     if (status === 1) {
+                        try { localStorage.setItem('game_id', String(gameId)); } catch {}
+                        // resolve participant index for connected account if available
+                        try {
+                            const chain = window.__chain;
+                            if (chain && chain.account) {
+                                const p = await getParticipantIndex(String(gameId), chain.account.address);
+                                if (p === '0' || p === '1') {
+                                    if (!window.__chain) window.__chain = {};
+                                    window.__chain.participantIndex = p;
+                                    console.log('[UI] Participant index:', p);
+                                }
+                            }
+                        } catch (e) { console.warn('participant index lookup failed', e); }
                         stopStatusPolling();
                         // enter game like before; keep background visible for immersive backdrop
                         const container = document.querySelector('.container');
@@ -356,10 +370,12 @@
                         if (bgEl && bgEl instanceof HTMLElement) {
                             bgEl.style.backgroundImage = "url('/cloud.gif')";
                         }
-                        if (!gameStarted) {
+                        if (!gameStarted && !gameStarting) {
+                            gameStarting = true;
                             const gameModule = await import('./src/game.ts');
                             game = await gameModule.createAndStartGame();
                             gameStarted = true;
+                            gameStarting = false;
                         }
                         // close the start modal if open
                         const startBackdrop = document.getElementById('start-game-backdrop');
@@ -437,6 +453,8 @@
                 }
                 showMainButtons();
                 console.log('Connected account:', account?.address);
+                // Expose chain context for game code
+                window.__chain = { account, manifest };
             } catch (err) {
                 console.error('Cartridge connect failed:', err);
                 alert('Connection failed. Please try again.');
@@ -546,6 +564,7 @@
                     if (!gameId) return;
                     const account = await controller.connect();
                     await startGame(account, manifest, String(gameId));
+                    try { localStorage.setItem('game_id', String(gameId)); } catch {}
                     // After sending start tx, verify via polling until status becomes 1
                     startStatusPolling(gameId);
                 } catch (e) {
